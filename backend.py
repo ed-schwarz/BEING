@@ -1,29 +1,46 @@
+import matplotlib.pyplot as plt
+import random
 import numpy as np
-from matplotlib import pyplot as plt
-from matplotlib import animation
 
-plt.rcParams["figure.figsize"] = [7.50, 3.50]
-plt.rcParams["figure.autolayout"] = True
+plt.ion()  # turning interactive mode on
 
-fig = plt.figure()
-ax = plt.axes(xlim=(0, 2), ylim=(-2, 2))
-line, = ax.plot([], [], lw=2)
+# preparing the data
+size = 10
+i = 0
+y = np.zeros(size)
+x = np.linspace(0, 2, size)
 
-def init():
-   line.set_data([], [])
-   return line,
+def get_sensor_data(i):
+    return np.sin(2 * np.pi * (0.1 * i))
 
-def read_sensor_data(i, x):
-    return np.sin(2 * np.pi * (x - 0.01 * i))
+def shift(x_s, n, value):
+    e = np.empty_like(x_s)
+    if n >= 0:
+        e[:n] = value
+        e[n:] = x_s[:-n]
+    else:
+        e[n:] = value
+        e[:n] = x_s[-n:]
+    return e
 
-def animate(i):
-   x = np.linspace(0, 2, 1000)
-   y = read_sensor_data(i, x)
-   line.set_data(x, y)
-   return line,
+# plotting the first frame
+graph = plt.plot(x,y)[0]
+plt.ylim(-2,2)
+plt.pause(1)
 
-anim = animation.FuncAnimation(fig, animate, init_func=init, frames=200, interval=20, blit=True)
-plt.show()
+# the update loop
+while(True):
+    # updating the data
+    sensor_data = get_sensor_data(i)
+    y = shift(y, -1, sensor_data)
     
-
-
+    # removing the older graph
+    graph.remove()
+    
+    # plotting newer graph
+    graph = plt.plot(x,y,color = 'g')[0]
+    plt.xlim(x[0], x[-1])
+    
+    # calling pause function for 0.25 seconds
+    plt.pause(0.25)
+    i += 1
