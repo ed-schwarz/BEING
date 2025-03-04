@@ -1,24 +1,29 @@
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-from matplotlib import style
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib import animation
 
-style.use('fivethirtyeight')
+plt.rcParams["figure.figsize"] = [7.50, 3.50]
+plt.rcParams["figure.autolayout"] = True
 
 fig = plt.figure()
-ax1 = fig.add_subplot(1,1,1)
+ax = plt.axes(xlim=(0, 2), ylim=(-2, 2))
+line, = ax.plot([], [], lw=2)
+
+def init():
+   line.set_data([], [])
+   return line,
+
+def read_sensor_data(i, x):
+    return np.sin(2 * np.pi * (x - 0.01 * i))
 
 def animate(i):
-    graph_data = open('example.txt','r').read()
-    lines = graph_data.split('\n')
-    xs = []
-    ys = []
-    for line in lines:
-        if len(line) > 1:
-            x, y = line.split(',')
-            xs.append(float(x))
-            ys.append(float(y))
-    ax1.clear()
-    ax1.plot(xs, ys)
+   x = np.linspace(0, 2, 1000)
+   y = read_sensor_data(i, x)
+   line.set_data(x, y)
+   return line,
 
-ani = animation.FuncAnimation(fig, animate, interval=1000)
+anim = animation.FuncAnimation(fig, animate, init_func=init, frames=200, interval=20, blit=True)
 plt.show()
+    
+
+
