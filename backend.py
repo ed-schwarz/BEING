@@ -6,8 +6,9 @@ plt.ioff()  # turning interactive mode on
 
 # preparing the data
 size = 1000
+number_sensors = 1
 i = 0
-y = np.zeros(size)
+y = np.zeros((1, size))
 x = np.linspace(0, 2, size)
 
 def get_sensor_data(i):
@@ -16,15 +17,17 @@ def get_sensor_data(i):
 def shift(x_s, n, value):
     e = np.empty_like(x_s)
     if n >= 0:
-        e[:n] = value
-        e[n:] = x_s[:-n]
+        e[:, :n] = value
+        e[:, n:] = x_s[:, :-n]
     else:
-        e[n:] = value
-        e[:n] = x_s[-n:]
+        e[: ,n:] = value
+        e[:, :n] = x_s[:, -n:]
     return e
 
 # plotting the first frame
-graph = plt.plot(x,y)[0]
+for j in range(number_sensors):
+    y_plot = y[j, :]
+    graph = plt.plot(x,y_plot, color='C0')[0]
 plt.ylim(-2,2)
 plt.pause(1)
 
@@ -38,9 +41,11 @@ while(True):
     graph.remove()
     
     # plotting newer graph
-    graph = plt.plot(x,y,color = 'g')[0]
+    for j in range(number_sensors):
+        y_plot = y[j, :]
+    graph = plt.plot(x,y_plot, color='C0')[0]
     plt.xlim(x[0], x[-1])
     
     # calling pause function for 0.25 seconds
-    plt.pause(0.01)
+    plt.pause(0.005)
     i += 1
