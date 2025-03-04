@@ -2,16 +2,16 @@ import matplotlib.pyplot as plt
 import random
 import numpy as np
 
-plt.ion()  # turning interactive mode on
+plt.ioff()  # turning interactive mode on
 
 # preparing the data
-size = 10
+size = 1000
 i = 0
 y = np.zeros(size)
 x = np.linspace(0, 2, size)
 
 def get_sensor_data(i):
-    return np.sin(2 * np.pi * (0.1 * i))
+    return np.sin(2 * np.pi * (0.001 * i))
 
 def shift(x_s, n, value):
     e = np.empty_like(x_s)
@@ -42,5 +42,5 @@ while(True):
     plt.xlim(x[0], x[-1])
     
     # calling pause function for 0.25 seconds
-    plt.pause(0.25)
+    plt.pause(0.01)
     i += 1
