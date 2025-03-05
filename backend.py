@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import random
 import numpy as np
 import sensors
+import socket_connect
 
 plt.ion()  # turning interactive mode on
 
@@ -12,12 +13,8 @@ i = 0
 y = np.zeros((1, size))
 x = np.linspace(0, 2, size)
 
-dummy = sensors.BMA280("SPI", 100, 3, 4)
-
-
-
-def get_sensor_data(i):
-    return np.sin(2 * np.pi * (0.001 * i))
+sock = socket_connect.connect_to_s_test('192.168.1.77')
+dummy = sensors.BMA280("SPI", 100, 3, 4, sock)
 
 def shift(x_s, n, value):
     e = np.empty_like(x_s)
