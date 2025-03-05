@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import random
 import numpy as np
+import sensors
 
-plt.ioff()  # turning interactive mode on
+plt.ion()  # turning interactive mode on
 
 # preparing the data
 size = 1000
@@ -10,6 +11,10 @@ number_sensors = 1
 i = 0
 y = np.zeros((1, size))
 x = np.linspace(0, 2, size)
+
+dummy = sensors.BMA280("SPI", 100, 3, 4)
+
+
 
 def get_sensor_data(i):
     return np.sin(2 * np.pi * (0.001 * i))
@@ -29,12 +34,13 @@ for j in range(number_sensors):
     y_plot = y[j, :]
     graph = plt.plot(x,y_plot, color='C0')[0]
 plt.ylim(-2,2)
+plt.show(block=False)
 plt.pause(1)
 
 # the update loop
 while(True):
     # updating the data
-    sensor_data = get_sensor_data(i)
+    sensor_data = dummy.get_dummy_sin(i)
     y = shift(y, -1, sensor_data)
     
     # removing the older graph
@@ -43,7 +49,7 @@ while(True):
     # plotting newer graph
     for j in range(number_sensors):
         y_plot = y[j, :]
-    graph = plt.plot(x,y_plot, color='C0')[0]
+        graph = plt.plot(x,y_plot, color='C0')[0]
     plt.xlim(x[0], x[-1])
     
     # calling pause function for 0.25 seconds
