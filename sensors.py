@@ -46,6 +46,45 @@ class Sensor:
     self.send_to_s_test(b"DIG_SPI1_CFG_SetCPHAHigh,014,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
     self.send_to_s_test(b"DIG_SPI1_CFG_SetFrameLength,123,18,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
 
+  def _parse_answer(self, answer, remove_first_elements=0, convert_to_type=None,
+                    card_select=0, separate_hex_nibbles=2):
+    """
+    splits answer from BSI to int list, separator is ',', removes '/n',
+    removes first elements, converts answer to list of (float, int, hex, bool
+    (BSI 'O'=TRUE, 'E'=FALSE), 'andbool' (AND calculation over all Bool
+    of existing BSI cards)
+    if conversion type is None no conversion is done and list of strings will be returned
+    :param answer: string to convert
+    :param remove_first_elements: number of leading list elements to remove
+    :param convert_to_type: conversion type
+    :param card_select: 1,2,..16 (single card) or 0 (all cards)
+    :param separate_hex_nibbles: nr of hex nibble to convert to int (f.e.'ff'=2 or 'ffff'=4)
+    :return:  converted value (single or list depends on card_select and conversion type)
+    (type depends on conversion type)
+    """
+    if answer is None:
+      return None
+    return_list = answer.strip('\n')
+    return_list = return_list.split(',')
+    if return_list[-1] == '\n':
+      return_list = return_list[:-1]  # strip newline at end of answer
+    if remove_first_elements > 0:
+      return_list = return_list[remove_first_elements:]
+    if card_select > 0:
+      res = self._convert_string(return_list[card_select - 1], convert_to_type,
+                                 '', separate_hex_nibbles)
+      return res
+    for ind in range(len(return_list)):
+      return_list[ind] = self._convert_string(return_list[ind], convert_to_type,
+                                              '', separate_hex_nibbles)
+    # card_select is 0 (allcards and bool has to be build over all EXISTING cards)
+    if convert_to_type == 'andbool':
+      for ind in range(self.bsi_nr_cards):
+        if not return_list[ind]:
+          return False
+      return True
+    return return_list
+
 
   def set_frequency_SPI(self):
     # DIG_SPI1_CFG_SETFREQUENCY,000,1e6
@@ -53,31 +92,34 @@ class Sensor:
 
   def set_frequency_I2C(self):
     # DIG_SPI1_CFG_SETFREQUENCY,000,1e6
-    print("placeholder")
+    self.send_to_s_test()
 
   def set_frequency(self):
     # DIG_SPI1_CFG_SETFREQUENCY,000,1e6
     match self.interface:
       case "SPI":
         self.set_frequency_SPI()
-      case "I2C":
-        self.set_frequency_I2C()
+      #case "I2C":
+        #self.set_frequency_I2C()
 
   def read_SPI(self, address):
     #read data using DIG_I2C1_Read or DIG_SPI_Read
     return self.read_from_s_test()
 
-  def read_I2C(self, address):
-    #read data using DIG_I2C1_Read or DIG_SPI_Read
-    return self.read_from_s_test()
+  def read_I2C(self, i2c_address):
+    cmd = 'DIG_I2C' + str(i2c_address) + '_Read'
+    return self.read_from_s_test(cmd.encode('ascii'))
+
 
   def read_register(self, address):
     #read data using DIG_I2C1_Read or DIG_SPI_Read
     match self.interface:
       case "SPI":
-        return self.read_SPI(address)
+        res = self.read_SPI(address)
       case "I2C":
-        return self.read_I2C(address)
+        res = self.read_I2C(address)
+
+    return self._parse_answer(res, 2, 'andbool', 1)
 
   def write_SPI(self, data, address):
     #read data using DIG_I2C1_Read or DIG_SPI_Read
@@ -96,10 +138,12 @@ class Sensor:
       case "I2C":
         self.write_I2C(data, address)
 
-  def send_to_s_test(self, data):
-    self.sock.send(data)
+  def send_to_s_test(self, cmd):
+    self.sock.sendall(cmd)
 
-  def read_from_s_test(self):
+
+  def read_from_s_test(self, cmd):
+    self.sock.sendall(cmd)
     return self.sock.recv(1024)
 
 #accelerator sensor
@@ -237,6 +281,8 @@ class BMA280(Sensor):
   def get_acceleration_lsb_z(self):
     addr = 0x6
     return self.read_register(addr)
+    #sock.sendall(b"Hello, world")
+    #return self.sock.recv(1024)
 
   def get_acceleration_msb_z(self):
     addr = 0x7

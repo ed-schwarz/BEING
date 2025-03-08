@@ -26,13 +26,11 @@ def get_constants(prefix):
                  if n.startswith(prefix)
                  )
 
-@hydra.main(version_base=None)
-def get_config(cfg: DictConfig) -> None:
-    print(OmegaConf.to_yaml(cfg))
+
 
 
 def connect_to_s_test(ip):
-    get_config()
+    #get_config()
     HOST = ip  # Standard loopback interface address (localhost)
     PORT = 21  # Port to listen on (non-privileged ports are > 1023)
     server_address = (HOST, PORT)
@@ -48,6 +46,19 @@ def connect_to_s_test(ip):
     return sock
     '''
     return sock
+
+def try_to_find_socket(ip):
+    HOST = ip  # Standard loopback interface address (localhost)
+    PORT = 21  # Port to listen on (non-privileged ports are > 1023)
+
+    for i in range(10000):
+        try:
+            print(i)
+            server_address = (HOST, i)
+            sock = socket.create_connection(server_address, all_errors=True)
+            return sock
+        except :
+            pass
 
 def send_to_s_test(sock, data):
     sock.send(data)
@@ -66,13 +77,15 @@ HOST = '192.168.1.77'  # Standard loopback interface address (localhost)
 
 
 
-
-sock = connect_to_s_test(HOST)
+'''
+#sock = connect_to_s_test(HOST)
+sock = try_to_find_socket(HOST)
 send_to_s_test(sock, b"Hello")
 data = read_from_s_test(sock)
 print(f"Received {data!r}")
 
 sock.close()
+'''
 
 
 

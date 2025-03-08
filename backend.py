@@ -3,6 +3,8 @@ import random
 import numpy as np
 import sensors
 import socket_connect
+import SpektraBsi
+import EvalBoard
 
 plt.ion()  # turning interactive mode on
 
@@ -13,8 +15,16 @@ i = 0
 y = np.zeros((1, size))
 x = np.linspace(0, 2, size)
 
-sock = socket_connect.connect_to_s_test('192.168.1.77')
-dummy = sensors.BMA280("SPI", 100, 3, 4, sock)
+HOST = '192.168.1.77'
+PORT = 17051
+
+#bsi_device = SpektraBsi.BsiInstrument()
+#bsi_device.open_bsi(HOST, PORT)
+#print(bsi_device.get_connected())
+sock = socket_connect.connect_to_s_test(HOST)
+dummy = sensors.BMA280("I2C", 100, 3, 4, sock)
+
+
 
 def shift(x_s, n, value):
     e = np.empty_like(x_s)
@@ -37,7 +47,8 @@ plt.pause(1)
 # the update loop
 while(True):
     # updating the data
-    sensor_data = dummy.get_dummy_sin(i)
+    sensor_data = dummy.get_acceleration_z
+    print(sensor_data)
     y = shift(y, -1, sensor_data)
     
     # removing the older graph
