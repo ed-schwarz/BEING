@@ -10,6 +10,7 @@ from PySide6.QtCore import QThread, QMutex
 from PySide6.QtCore import Signal, QObject
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget, QListWidgetItem
 from gui import EvalBoardWidget
+from plot_example import GUI_PLOT
 
 import functools
 
@@ -87,6 +88,7 @@ class Device(QObject):
     def checklog(self, text: str, result: bool):
         # use stdout
         print(("check" if result else "fail") + "\t" + text)
+
         # emit signal with stuff to print for gui
         self.output.emit(result, text)
 
@@ -227,9 +229,8 @@ class BMA280(Device):
         'temp': 0x08
     }
 
-    def __init__(self, utb: BsiInstrument, interface):
+    def __init__(self, utb: BsiInstrument):
         super().__init__(utb)
-        self.interface = interface
         self.utb_i2c = BsiI2c(self.utb, 1, 1)  # TODO: only bsi card 1 supported
         self.measure_thread = BMA280AccelerationMeasurementThread(self, 'xyz', 1)
 
@@ -275,16 +276,9 @@ class BMA280(Device):
         :return: read bytes if succeed, else False
         """
         # read data
-        match self.interface:
-            case "SPI":
-                res = self.utb_i2c.write(self.i2c_addr, addr)
-                time.sleep(.010)
-                ans = self.utb_i2c.read(self.i2c_addr, num_bytes)
-            case "I2C":
-                res = self.utb_i2c.write(self.i2c_addr, addr)
-                time.sleep(.010)
-                ans = self.utb_i2c.read(self.i2c_addr, num_bytes)
-
+        res = self.utb_i2c.write(self.i2c_addr, addr)
+        time.sleep(.010)
+        ans = self.utb_i2c.read(self.i2c_addr, num_bytes)
         res = res and bool(ans)
         if res:
             self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
@@ -304,11 +298,7 @@ class BMA280(Device):
         # add addr word at start
         data.insert(0, addr)
 
-        match self.interface:
-            case "SPI":
-                res = self.utb_i2c.write(self.i2c_addr, data)
-            case "I2C":
-                res = self.utb_i2c.write(self.i2c_addr, data)
+        res = self.utb_i2c.write(self.i2c_addr, data)
 
         self.checklog("Writing " +
                       str(len(data) - 1) + " bytes at address 0x" + format(data[0], '02X') + ": " +
@@ -321,16 +311,9 @@ class BMA280(Device):
         read the temperature register
         :return: the tempereature of the chip in °C, resolution is 0.5K
         """
-        match self.interface:
-            case "SPI":
-                # ans = self.utb_i2c.write_read(self.i2c_addr, bytearray([self.register['temp']]), 1)
-                res = self.utb_i2c.write(self.i2c_addr, bytearray(b'\x08'))
-                ans = self.utb_i2c.read(self.i2c_addr, 1)
-            case "I2C":
-                # ans = self.utb_i2c.write_read(self.i2c_addr, bytearray([self.register['temp']]), 1)
-                res = self.utb_i2c.write(self.i2c_addr, bytearray(b'\x08'))
-                ans = self.utb_i2c.read(self.i2c_addr, 1)
-
+        # ans = self.utb_i2c.write_read(self.i2c_addr, bytearray([self.register['temp']]), 1)
+        res = self.utb_i2c.write(self.i2c_addr, bytearray(b'\x08'))
+        ans = self.utb_i2c.read(self.i2c_addr, 1)
         if bool(ans):
             temp = 23 + int.from_bytes(ans, 'big', signed=True) / 2
             self.checklog("Temperature: {:.1f}°C".format(temp), bool(ans))
@@ -348,26 +331,15 @@ class BMA280(Device):
         axis_addr = {ax: self.register['acc_' + ax].to_bytes(1, 'big') for ax in axis}
         ans = dict()
         for ax, lsb_addr in axis_addr.items():
-            match self.interface:
-                case "SPI":
-                    res = self.utb_i2c.write(self.i2c_addr,
-                                             bytearray(lsb_addr))  # address of the lsb, needs to be read first
-                    lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
-                    lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
-                    res = res and self.utb_i2c.write(self.i2c_addr,
-                                                     bytearray(
-                                                         (int.from_bytes(lsb_addr, 'big') + 1).to_bytes(1, 'big')))
-                    msb = self.utb_i2c.read(self.i2c_addr, 1)
-                case "I2C":
-                    res = self.utb_i2c.write(self.i2c_addr,
-                                             bytearray(lsb_addr))  # address of the lsb, needs to be read first
-                    lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
-                    lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
-                    res = res and self.utb_i2c.write(self.i2c_addr,
-                                                     bytearray(
-                                                         (int.from_bytes(lsb_addr, 'big') + 1).to_bytes(1, 'big')))
-                    msb = self.utb_i2c.read(self.i2c_addr, 1)
-
+            res = self.utb_i2c.write(self.i2c_addr, bytearray(lsb_addr))  # address of the lsb, needs to be read first
+            print(res)
+            lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
+            print(lsb)
+            lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
+            print(lsb)
+            res = res and self.utb_i2c.write(self.i2c_addr,
+                                             bytearray((int.from_bytes(lsb_addr, 'big') + 1).to_bytes(1, 'big')))
+            msb = self.utb_i2c.read(self.i2c_addr, 1)
             msb = int.from_bytes(msb, "big")
 
             acc = ((msb << 8) + lsb) >> 2  # combine msb and first 6 bit of lsb for full 14bit sensor value
@@ -548,7 +520,7 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
 
     # UTB instance
-    socket_addr = '192.168.001.77'
+    socket_addr = '192.168.001.79'
     evalutb = BsiInstrument()
     evalutb.last_address = socket_addr
 
@@ -558,12 +530,11 @@ if __name__ == '__main__':
     bma280 = BMA280(evalutb)
     ntc = NTC(evalutb)
     zener = ZenerDiode(evalutb)
-    '''
-    window = EvalBoardWidget(evalutb, eeprom, osci, bma280, ntc, zener)
+
+    #window = EvalBoardWidget(evalutb, eeprom, osci, bma280, ntc, zener)
+    window = GUI_PLOT(evalutb, bma280)
 
     app.aboutToQuit.connect(bma280.measure_thread.terminate)
 
     window.show()
     app.exec()
-    
-'''

@@ -1,8 +1,5 @@
 import matplotlib.pyplot as plt
-import random
 import numpy as np
-import sensors
-import socket_connect
 import SpektraBsi
 import EvalBoard
 
@@ -15,14 +12,17 @@ i = 0
 y = np.zeros((1, size))
 x = np.linspace(0, 2, size)
 
-HOST = '192.168.1.77'
-PORT = 17051
 
-#bsi_device = SpektraBsi.BsiInstrument()
-#bsi_device.open_bsi(HOST, PORT)
-#print(bsi_device.get_connected())
-sock = socket_connect.connect_to_s_test(HOST)
-dummy = sensors.BMA280("I2C", 100, 3, 4, sock)
+
+socket_addr = '192.168.001.79'
+evalutb = SpektraBsi.BsiInstrument()
+evalutb.last_address = socket_addr
+
+
+bma280 = EvalBoard.BMA280(evalutb)
+res = evalutb.open_bsi(socket_addr)
+print(res)
+
 
 
 
@@ -43,11 +43,14 @@ for j in range(number_sensors):
 plt.ylim(-2,2)
 plt.show(block=False)
 plt.pause(1)
+sensor_data = bma280.getAcceleration('z')
+print(sensor_data)
 
+'''
 # the update loop
 while(True):
     # updating the data
-    sensor_data = dummy.get_acceleration_z
+    sensor_data = bma280.getAcceleration('z')
     print(sensor_data)
     y = shift(y, -1, sensor_data)
     
@@ -63,3 +66,4 @@ while(True):
     # calling pause function for 0.25 seconds
     plt.pause(0.005)
     i += 1
+    '''

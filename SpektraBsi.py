@@ -51,7 +51,7 @@ class BsiInstrument:
     # class members
     connected = False
     last_address = "127.0.0.0"
-    last_port = 21
+    last_port = 17501
     bsi_socket = None
     bsi_timeout = 5.0
     bsi_id = None
@@ -69,7 +69,7 @@ class BsiInstrument:
         self.lock = threading.Lock()
         self.connected = False
         self.last_address = "127.0.0.0"
-        self.last_port = 21
+        self.last_port = 17501
         self.bsi_socket = None
         self.bsi_timeout = 5.0
         self.bsi_id = None
@@ -106,7 +106,7 @@ class BsiInstrument:
             self.bsi_socket.settimeout(self.bsi_timeout)  # 10.0)
             self.bsi_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
-    def open_bsi(self, address, port=21):
+    def open_bsi(self, address, port=17501):
         """
         opens bsi_instrument communication, reads id and card serialnumbers
         :param address: IP address as string f.e. '192.168.1.3'
@@ -1760,8 +1760,8 @@ def bsi_open_by_ini(ini_filepath, ini_section):
     opens BSI instrument with settings defined by ini_parser ini_section
     example:
     [BSI]
-    ip=192.168.1.77
-    port=21
+    ip=192.168.1.33
+    port=17501
     :param ini_filepath: file path of ini_parser file as string
     :param ini_section: ini_section name as string
     :return: instance of BSI, else None (if not connected)
@@ -1774,7 +1774,7 @@ def bsi_open_by_ini(ini_filepath, ini_section):
     else:
         print('ERROR: Ini file has no section [ip], BSI IP not defined')
         return None
-    port = 21
+    port = 17501
     if parser.has_option(ini_section, 'port'):
         port = int(parser.get(ini_section, 'port'))
     bsi = BsiInstrument()
@@ -1963,7 +1963,7 @@ if __name__ == "__main__":
     # example of use
     print('Example')
     bsi_instrument = BsiInstrument()
-    ok = bsi_instrument.open_bsi("192.168.1.77")  # use default port 21
+    ok = bsi_instrument.open_bsi("192.168.1.33")  # use default port 17501
     if ok:
         ok = bsi_instrument.set_meas_range(1)
         vpos = bsi_instrument.get_voltage('MIO01', 'MIO02', 0)
