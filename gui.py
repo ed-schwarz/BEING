@@ -1,7 +1,8 @@
 import time
 
 from PySide6.QtGui import QColorConstants, QPixmap, QPainter, QTextDocument, QWheelEvent, QMouseEvent, QTransform
-from PySide6.QtWidgets import (QWidget, QTabWidget, QListWidget,
+
+from PySide6.QtWidgets import (QApplication, QWidget, QTabWidget, QListWidget,
                                QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
                                QPushButton, QTextEdit, QLineEdit, QLabel, QListWidgetItem, QAbstractItemView, QSpinBox,
                                QFrame, QSizePolicy, QScrollArea, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
@@ -10,6 +11,7 @@ from PySide6.QtCore import Qt, QPoint
 import pyqtgraph
 
 from SpektraBsi import BsiInstrument, TMUMeasurementQuantity
+
 
 
 def get_traffic_light_pixmap(color=QColorConstants.Gray, radius=8):
@@ -23,8 +25,8 @@ def get_traffic_light_pixmap(color=QColorConstants.Gray, radius=8):
     return px
 
 
-class EvalBoardWidget(QWidget):
-    def __init__(self, utb: BsiInstrument, eeprom, osci, bma280, ntc, zener):
+class GUI_WINDOW(QWidget):
+    def __init__(self, utb: BsiInstrument, bma280):
         super().__init__()
 
         self.utb = utb
@@ -46,17 +48,10 @@ class EvalBoardWidget(QWidget):
         # tabview
         self.tabWidget = QTabWidget()
         # tabs
-        self.eepromWidget = EepromWidget(eeprom)
-        self.oscillatorWidget = OscillatorWidget(osci)
         self.bmaWidget = BMA280Widget(bma280)
-        self.ntcWidget = NTCWidget(ntc)
-        self.zenerWidget = ZenerWidget(zener)
 
-        self.tabWidget.addTab(self.eepromWidget, "EEPROM")
-        self.tabWidget.addTab(self.oscillatorWidget, "Oscillator")
         self.tabWidget.addTab(self.bmaWidget, "BMA280")
-        self.tabWidget.addTab(self.ntcWidget, "NTC")
-        self.tabWidget.addTab(self.zenerWidget, "Zener")
+
 
         # console
         self.consoleListWidget = QListWidget()
@@ -94,11 +89,7 @@ class EvalBoardWidget(QWidget):
             res = self.utb.open_bsi(ip)
             if res:
                 self.connectBtn.setText("Disconnect")
-                self.eepromWidget.setEnabled(True)
-                self.oscillatorWidget.setEnabled(True)
                 self.bmaWidget.setEnabled(True)
-                self.ntcWidget.setEnabled(True)
-                self.zenerWidget.setEnabled(True)
                 self.consoleListWidget.item(self.consoleListWidget.count() - 1).setIcon(
                     get_traffic_light_pixmap(QColorConstants.Green))
             else:
@@ -112,11 +103,7 @@ class EvalBoardWidget(QWidget):
             res = self.utb.disconnect()
             if res:
                 self.connectBtn.setText("Connect")
-                self.eepromWidget.setEnabled(False)
-                self.oscillatorWidget.setEnabled(False)
                 self.bmaWidget.setEnabled(False)
-                self.ntcWidget.setEnabled(False)
-                self.zenerWidget.setEnabled(False)
 
                 self.consoleListWidget.item(self.consoleListWidget.count() - 1).setIcon(
                     get_traffic_light_pixmap(QColorConstants.Green))
@@ -130,6 +117,35 @@ class EvalBoardWidget(QWidget):
                      get_traffic_light_pixmap(QColorConstants.Red))
         self.consoleListWidget.addItem(item)
         self.consoleListWidget.scrollToItem(item)
+
+class ImageWidget(QGraphicsView):
+    def __init__(self, path, parent=None):
+        super().__init__(parent)
+        self._scene = QGraphicsScene(self)
+        self.setScene(self._scene)
+
+        # TODO: better implement a QImage -> leads to better quality when downscaling, but problems with panning occur
+        self._pixmap_item = QGraphicsPixmapItem(QPixmap(path))
+        self._scene.addItem(self._pixmap_item)
+
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+
+        self._scale_factor = 1.0
+
+    def wheelEvent(self, event: QWheelEvent):
+        if event.angleDelta().y() > 0:
+            self._scale_factor *= 1.1
+        else:
+            self._scale_factor /= 1.1
+        self.zoom(self._scale_factor)
+
+    def zoom(self, zoom_factor, zoom_min=0.1, zoom_max=5.0):
+        self._scale_factor = zoom_factor
+        self._scale_factor = max(zoom_min, min(zoom_max, self._scale_factor))
+        self.setTransform(QTransform().scale(self._scale_factor, self._scale_factor))
 
 
 class DeviceWidget(QWidget):
@@ -147,8 +163,8 @@ class DeviceWidget(QWidget):
         self.device = device
 
         # image for schematic
-        self.schematicView = ImageWidget('./doc/schematics/' + self.device.device_type + '_schematic.png')
-        self.schematicView.zoom(0.5)
+        #self.schematicView = ImageWidget('./doc/schematics/' + self.device.device_type + '_schematic.png')
+        #self.schematicView.zoom(0.5)
 
         # cfg interface and pwr buttons
         self.buttonConfig = QPushButton("Cfg IFace")  # config power (pins, mode, levels etc.) and MIO pin interface
@@ -163,7 +179,7 @@ class DeviceWidget(QWidget):
 
         # layout
         self.layout = QGridLayout()
-        self.layout.addWidget(self.schematicView, 0, 0, 1, -1)
+        #self.layout.addWidget(self.schematicView, 0, 0, 1, -1)
         self.layout.addWidget(self.buttonConfig, 1, 0)
         self.layout.addWidget(self.pwrLabel, 1, 1)
         self.layout.addWidget(self.buttonPowerOn, 1, 2)
@@ -192,88 +208,6 @@ class DeviceWidget(QWidget):
         self.buttonConfig.setEnabled(True)
 
 
-class EepromWidget(DeviceWidget):
-    def __init__(self, eeprom):
-        super().__init__(eeprom)
-
-        self.buttonWrite = QPushButton("write")
-        self.labelAddress = QLabel("address")
-        self.labelAddress.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.labelAddress2 = QLabel("address")
-        self.labelAddress2.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.WriteAddrLineEdit = QLineEdit("AA")
-        self.WriteAddrLineEdit.setFont('Consolas')
-        self.WriteAddrLineEdit.setFixedSize(21, 24)
-        # self.WriteAddrLineEdit.setMaxLength(2)
-        self.WriteAddrLineEdit.setInputMask('>HH;_')
-        self.WriteDataLineEdit = QLineEdit("A0 AF")
-        self.WriteDataLineEdit.setFont('Consolas')
-        self.WriteDataLineEdit.setFixedSize(168, 24)
-        # self.WriteDataLineEdit.setMaxLength(2*8+7)
-        self.WriteDataLineEdit.setInputMask('>HH hh hh hh hh hh hh hh;_')
-        self.buttonRead = QPushButton("read")
-        self.ReadAddrLineEdit = QLineEdit("00")
-        self.ReadAddrLineEdit.setFont('Consolas')
-        self.ReadAddrLineEdit.setFixedSize(21, 24)
-        self.ReadAddrLineEdit.setInputMask('>HH;_')
-        self.ReadNumBytesSpinBox = QSpinBox()
-        self.ReadNumBytesSpinBox.setMaximum(255)
-        self.ReadNumBytesSpinBox.setMinimum(1)
-        self.ReadNumBytesSpinBox.setValue(8)
-        self.ReadNumBytesSpinBox.setButtonSymbols(QSpinBox.ButtonSymbols.PlusMinus)
-        self.ReadNumBytesSpinBox.setFont('Consolas')
-        self.ReadNumBytesSpinBox.setFixedSize(45, 24)
-
-        self.layout.addWidget(self.buttonWrite, 2, 0)
-        self.layout.addWidget(self.labelAddress, 2, 1)
-        self.layout.addWidget(self.WriteAddrLineEdit, 2, 2)
-        self.layout.addWidget(QLabel("data"), 2, 3)
-        self.layout.addWidget(self.WriteDataLineEdit, 2, 4)
-        self.layout.addWidget(self.buttonRead, 3, 0)
-        self.layout.addWidget(self.labelAddress2, 3, 1)
-        self.layout.addWidget(self.ReadAddrLineEdit, 3, 2)
-        self.layout.addWidget(QLabel("amount"), 3, 3)
-        self.layout.addWidget(self.ReadNumBytesSpinBox, 3, 4)
-
-        self.setLayout(self.layout)
-
-        # connect signals
-        self.buttonWrite.clicked.connect(self.write)
-        self.buttonRead.clicked.connect(self.read)
-
-    def write(self):
-        addr = int(self.WriteAddrLineEdit.text(), 16)
-        data_str = self.WriteDataLineEdit.text().split(sep=" ")
-        data = bytearray()
-        for e in data_str:
-            if len(e) == 2:
-                data.append(int(e, 16))
-        self.device.write(addr, data)
-
-    def read(self):
-        addr = bytearray()
-        addr.insert(0, int(self.ReadAddrLineEdit.text(), 16))
-        self.device.read(addr, self.ReadNumBytesSpinBox.value())
-
-
-class OscillatorWidget(DeviceWidget):
-    def __init__(self, osci):
-        super().__init__(osci)
-
-        self.buttonMeasure = QPushButton("Measure")
-        self.ComboboxQuantitiy = QComboBox()
-        self.ComboboxQuantitiy.insertItems(0, ['Frequency', 'Time', 'Count', 'DutyCycle'])
-
-        # TODO: add widget showing the oscillator waveform
-
-        self.layout.addWidget(self.buttonMeasure, 2, 0)
-        self.layout.addWidget(self.ComboboxQuantitiy, 2, 1)
-
-        self.buttonMeasure.clicked.connect(self.measure)
-
-    def measure(self):
-        quantity = TMUMeasurementQuantity(self.ComboboxQuantitiy.currentIndex())
-        self.device.measure(quantity)
 
 
 class BMA280Widget(DeviceWidget):
@@ -412,22 +346,15 @@ class BMA280Widget(DeviceWidget):
 
     def plot(self):
         # exchange schematicview with plotwidget
-        if self.layout.itemAtPosition(0, 0).widget() == self.schematicView:
-            self.schematicView.hide()
-            self.layout.removeWidget(self.schematicView)
-            self.layout.addWidget(self.plotWidget, 0, 0, 1, -1)
-            self.plotWidget.show()
-            self.buttonPlot.setText("Schematic")
-            # start live measuring
-            self.device.measure_thread.start()
-        else:
-            # stop live measuring
-            self.device.measure_thread.terminate()
-            self.plotWidget.hide()
-            self.layout.removeWidget(self.plotWidget)
-            self.layout.addWidget(self.schematicView, 0, 0, 1, -1)
-            self.schematicView.show()
-            self.buttonPlot.setText("Plot")
+        
+        #self.schematicView.hide()
+        #self.layout.removeWidget(self.schematicView)
+        self.layout.addWidget(self.plotWidget, 0, 0, 1, -1)
+        self.plotWidget.show()
+        #self.buttonPlot.setText("Schematic")
+        # start live measuring
+        self.device.measure_thread.start()
+        
 
     def addPointToPlot(self, pt: dict):
         self.t.append(pt['count'])
@@ -444,77 +371,3 @@ class BMA280Widget(DeviceWidget):
             self.line_z.setData(self.t, self.z)
 
 
-class NTCWidget(DeviceWidget):
-    def __init__(self, ntc):
-        super().__init__(ntc)
-
-        self.buttonHeaterOn = QPushButton("Heater On")
-        self.buttonHeaterOff = QPushButton("Heater Off")
-        self.buttonMeasure = QPushButton("Measure")
-        self.labelHeater = QLabel("Heater")
-        self.labelHeater.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        self.layout.addWidget(self.buttonMeasure, 2, 0)
-        self.layout.addWidget(self.labelHeater, 2, 1)
-        self.layout.addWidget(self.buttonHeaterOn, 2, 2)
-        self.layout.addWidget(self.buttonHeaterOff, 2, 3)
-
-        self.buttonHeaterOn.clicked.connect(self.device.heater_on)
-        self.buttonHeaterOff.clicked.connect(self.device.heater_off)
-        self.buttonMeasure.clicked.connect(self.device.measure_voltage)
-
-
-class ZenerWidget(DeviceWidget):
-    def __init__(self, ntc):
-        super().__init__(ntc)
-
-        self.buttonMeasureCurrent = QPushButton("Meassure I")
-        self.buttonSetVoltage = QPushButton("Set V")
-        self.doubleSpinBoxVoltage = QDoubleSpinBox()
-        self.doubleSpinBoxVoltage.setMaximum(8)
-        self.doubleSpinBoxVoltage.setMinimum(1)
-        self.doubleSpinBoxVoltage.setSingleStep(.1)
-        self.doubleSpinBoxVoltage.setValue(self.device.init_voltage)  # TODO: supports only card 1
-        self.doubleSpinBoxVoltage.setButtonSymbols(QSpinBox.ButtonSymbols.PlusMinus)
-        self.doubleSpinBoxVoltage.setFont('Consolas')
-        self.doubleSpinBoxVoltage.setFixedSize(45, 24)
-
-        self.layout.addWidget(self.doubleSpinBoxVoltage, 2, 0)
-        self.layout.addWidget(self.buttonSetVoltage, 2, 1)
-        self.layout.addWidget(self.buttonMeasureCurrent, 2, 3)
-
-        self.buttonMeasureCurrent.clicked.connect(self.device.measure_current)
-        self.buttonSetVoltage.clicked.connect(self.set_voltage)
-
-    def set_voltage(self):
-        self.device.set_voltage(self.doubleSpinBoxVoltage.value())
-
-
-class ImageWidget(QGraphicsView):
-    def __init__(self, path, parent=None):
-        super().__init__(parent)
-        self._scene = QGraphicsScene(self)
-        self.setScene(self._scene)
-
-        # TODO: better implement a QImage -> leads to better quality when downscaling, but problems with panning occur
-        self._pixmap_item = QGraphicsPixmapItem(QPixmap(path))
-        self._scene.addItem(self._pixmap_item)
-
-        self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-
-        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-
-        self._scale_factor = 1.0
-
-    def wheelEvent(self, event: QWheelEvent):
-        if event.angleDelta().y() > 0:
-            self._scale_factor *= 1.1
-        else:
-            self._scale_factor /= 1.1
-        self.zoom(self._scale_factor)
-
-    def zoom(self, zoom_factor, zoom_min=0.1, zoom_max=5.0):
-        self._scale_factor = zoom_factor
-        self._scale_factor = max(zoom_min, min(zoom_max, self._scale_factor))
-        self.setTransform(QTransform().scale(self._scale_factor, self._scale_factor))
