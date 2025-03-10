@@ -2,7 +2,7 @@ from gui import GUI_WINDOW
 from SpektraBsi import BsiInstrument, BsiI2c, TMUMeasurementQuantity
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget, QListWidgetItem
 import sys
-from sensors import BMA280
+import sensors
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
@@ -21,10 +21,9 @@ if __name__ == '__main__':
         'INT1': 4, 'INT2': 3  # interrupt pins
     }
     
-    bma280 = BMA280(evalutb, pwr_sources, pins)
+    bma280 = sensors.BMA280(evalutb, pwr_sources, pins, 'I2C')
 
 
-    #window = EvalBoardWidget(evalutb, eeprom, osci, bma280, ntc, zener)
     window = GUI_WINDOW(evalutb, bma280)
 
     app.aboutToQuit.connect(bma280.measure_thread.terminate)

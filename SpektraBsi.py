@@ -22,6 +22,7 @@ import time
 import configparser
 from typing import Union
 from I2cInterface import I2cInterface
+from SPIInteface import SPIInterface
 from enum import Enum
 
 
@@ -1753,6 +1754,51 @@ class BsiI2c(I2cInterface):
 
 
 # end of class BsiI2C
+'''
+class BsiSPI(SPIInterface):
+    """
+    Class for BSI I2c use as I2cInterface class
+    * I2C communication (one Channel per card)
+    channels: 0=SYS I2C, 1...4 MIO I2C
+    """
+
+    def __init__(self, bsi, card_select, channel_select):
+        """
+        constructor
+        :param card_select: 1,2,..16 (single card) or 0 (all cards) as int
+        :param channel_select: 0=SYS I2C, 1...4 MIO I2C as int
+        """
+        self._bsi = bsi
+        self._card = card_select
+        self._channel = channel_select
+
+    def write(self, spi_addr: int, data: bytearray) -> Union[bool, None]:
+        return self._bsi.spi_write_frame(spi_addr, list(data), self._card, self._channel)
+    
+
+    def read(self, spi_addr: int, read_len: int) -> Union[bytearray, None]:
+        dat = self._bsi.spi_read_frame(spi_addr, read_len, self._card, self._channel)
+        if dat != '':
+            if type(dat) is list:
+                return bytearray(dat)
+            if type(dat) is int:
+                return dat.to_bytes(read_len, 'big')
+        else:
+            return None
+
+    def write_read(self, spi_addr: int, data: bytearray, read_len: int) -> Union[bytearray, None]:
+        dat = self._bsi.spi_write_read_frame(spi_addr, list(data), read_len, self._card, self._channel)
+        if dat != '':
+            if type(dat) is list:
+                return bytearray(dat)
+            if type(dat) is int:
+                return dat.to_bytes(read_len, 'big')
+        else:
+            return None
+
+
+# end of class BsiSPI'
+'''
 
 
 def bsi_open_by_ini(ini_filepath, ini_section):

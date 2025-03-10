@@ -232,10 +232,11 @@ class BMA280(Sensor):
         'temp': 0x08
     }
 
-    def __init__(self, utb: BsiInstrument, pwr_sources, pins):
+    def __init__(self, utb: BsiInstrument, pwr_sources, pins, interface):
         super().__init__(utb)
         self.pwr_sources = pwr_sources
         self.pins = pins
+        self.interface = interface
         self.utb_i2c = BsiI2c(self.utb, 1, 1)  # TODO: only bsi card 1 supported
         self.measure_thread = BMA280AccelerationMeasurementThread(self, 'xyz', 1)
 
