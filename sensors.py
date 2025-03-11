@@ -27,7 +27,7 @@ def utb_connected(f):
 
     return func
 
-
+#Parent Class for sensors. Do not instanciate it directly
 class Sensor(QObject):
     device_type = None  # i.e. "EEPROM"
     part_number = None  # optional
@@ -54,7 +54,7 @@ class Sensor(QObject):
         super().__init__()
         self.utb = utb
         
-
+    #turn power off
     @utb_connected
     def power_off(self):
         ans = True
@@ -67,6 +67,7 @@ class Sensor(QObject):
             ans &= res
         return ans
 
+    #turn power on
     @utb_connected
     def power_on(self):
         ans = True
@@ -94,6 +95,7 @@ class Sensor(QObject):
         self.output.emit(result, text)
 
 
+
 class EEPROM24XX02(Sensor):
     device_type = "EEPROM"
     part_number = "24XX02"
@@ -104,7 +106,7 @@ class EEPROM24XX02(Sensor):
 
     def __init__(self, utb: BsiInstrument):
         super().__init__(utb)
-        self.utb_i2c = BsiI2c(self.utb, 1, 1)  # TODO: only bsi card 1 supported
+        self.utb_i2c = BsiI2c(self.utb, 1, 1)  
 
     @utb_connected
     def configure(self):
@@ -155,6 +157,7 @@ class EEPROM24XX02(Sensor):
             self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
                           ' '.join(format(x, '02X') for x in addr), res)
 
+    #read entire EEPROM
     @utb_connected
     def read_all(self):
         self.utb_i2c.write(0x57, bytearray(1))  # start address
@@ -176,11 +179,12 @@ class Oscillator(Sensor):
     device_type = "Osci"
     pwr_sources = 2
     
-    # TODO: add method for measuring U-t-diagram
+
     def __init__(self, utb: BsiInstrument):
 
         super().__init__(utb)
 
+    #configure the Sensor
     @utb_connected
     def configure(self):
         self.utb.pwr_set_supply_current_limit_max(self.pwr_sources[0], 20, 0)
@@ -189,8 +193,7 @@ class Oscillator(Sensor):
         self.utb.pwr_set_supply_voltage(self.pwr_sources[0], 5, 0)
 
         self.utb.set_meas_range(0)
-        # TODO: measure V and I for demonstrating current limiting, too?
-        # TODO: add more possibilities to configure the configuration (eg. using event 1)
+
         res = self.utb.send_cmd_val_parse_answer('TMU_CFG_GateTime', str((hex(100)))[2:], 0)
         self.checklog("set gate time", res)
         res = self.utb.send_cmd_parse_answer('TMU_CFG_Event0_Source_LowComp', 0)
@@ -206,11 +209,11 @@ class Oscillator(Sensor):
         res = self.utb.send_cmd_parse_answer('TMU_CFG_Event1_FallingEdge_On', 0)
         self.checklog("set event1 to falling edge", res)  # used for duty cycle measurement
 
+    #measure Oscillator
     @utb_connected
     def measure(self, quantity: TMUMeasurementQuantity):
         quantity = str(TMUMeasurementQuantity(quantity))[33:]
         ans = self.utb.send_cmd_parse_answer('TMU_MEAS_' + quantity, 0, hex if quantity == 'Count' else float)
-        # TODO: sophisticated evaluation of answer depending on quantity
         self.checklog("Measuring " + quantity + ": " + str(ans), ans)
 
 
@@ -237,9 +240,10 @@ class BMA280(Sensor):
         self.pwr_sources = pwr_sources
         self.pins = pins
         self.interface = interface
-        self.utb_i2c = BsiI2c(self.utb, 1, 1)  # TODO: only bsi card 1 supported
+        self.utb_i2c = BsiI2c(self.utb, 1, 1)  
         self.measure_thread = BMA280AccelerationMeasurementThread(self, 'xyz', 1)
 
+    #configure the Sensor
     @utb_connected
     def configure(self):
         res = True
@@ -371,7 +375,6 @@ class BMA280(Sensor):
         self.checklog("set interrupt mode to latched", res)
         res &= self._ChangeBitInRegister(0x16, 4, 1)  # DTap interrupt enable
         self.checklog("DTap interrupt enable", res)
-        # TODO: add configuration for tap duration, tap threshold etc.
         return res
 
     @utb_connected
@@ -395,7 +398,6 @@ class BMA280(Sensor):
         """
         assert bit in range(8)
         assert mode in range(2)
-        # TODO: conflict with measure thread -> crashes when refresh rate too fast
         reg = self.read(bytearray([register]))
         if type(reg) is bool and not reg:
             return False
@@ -408,7 +410,7 @@ class BMA280(Sensor):
         res = self.write(register, bytearray([reg]))
         return res
 
-
+#used to measure in GUI
 class BMA280AccelerationMeasurementThread(QThread):
     newValue = Signal(dict)
 
@@ -515,7 +517,7 @@ class ZenerDiode(Sensor):
 
     @utb_connected
     def measure_current(self):
-        ans = self.utb.pwr_get_current(self.pwr_sources[0], 1)  # TODO: supports only BSI card 1
+        ans = self.utb.pwr_get_current(self.pwr_sources[0], 1)  
         self.checklog("Current through PMU {}: I={}mA".format(self.pwr_sources[0], ans), bool(ans))
 
     @utb_connected

@@ -13,7 +13,7 @@ import pyqtgraph
 from SpektraBsi import BsiInstrument, TMUMeasurementQuantity
 
 
-
+#used to draw the colored circles
 def get_traffic_light_pixmap(color=QColorConstants.Gray, radius=8):
     width, height = 2 * radius, 2 * radius
     px = QPixmap(width, height)
@@ -24,7 +24,7 @@ def get_traffic_light_pixmap(color=QColorConstants.Gray, radius=8):
     p.end()
     return px
 
-
+#class to create the GUI window
 class GUI_WINDOW(QWidget):
     def __init__(self, utb: BsiInstrument, bma280):
         super().__init__()
@@ -48,6 +48,7 @@ class GUI_WINDOW(QWidget):
         # tabview
         self.tabWidget = QTabWidget()
         # tabs
+        #to add Widgets, instanciate a widget and create a tab for it. In this class only changes here are needed
         self.bmaWidget = BMA280Widget(bma280)
 
         self.tabWidget.addTab(self.bmaWidget, "BMA280")
@@ -73,6 +74,8 @@ class GUI_WINDOW(QWidget):
 
         self.tabWidget.setCurrentIndex(2)
 
+    
+    #connect to the S-Test. Do not change
     def utb_connect(self):
         if not self.utb.connected:
             self.consoleListWidget.addItem("Connecting to UTB @ " + self.IPLineEdit.text())
@@ -118,13 +121,13 @@ class GUI_WINDOW(QWidget):
         self.consoleListWidget.addItem(item)
         self.consoleListWidget.scrollToItem(item)
 
+#Used to display images in the widget
 class ImageWidget(QGraphicsView):
     def __init__(self, path, parent=None):
         super().__init__(parent)
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
 
-        # TODO: better implement a QImage -> leads to better quality when downscaling, but problems with panning occur
         self._pixmap_item = QGraphicsPixmapItem(QPixmap(path))
         self._scene.addItem(self._pixmap_item)
 
@@ -147,7 +150,8 @@ class ImageWidget(QGraphicsView):
         self._scale_factor = max(zoom_min, min(zoom_max, self._scale_factor))
         self.setTransform(QTransform().scale(self._scale_factor, self._scale_factor))
 
-
+#Parent Class for Widgets. Do not instanciate it directly
+#Changes here affect all widgets
 class DeviceWidget(QWidget):
     def __init__(self, device):
         """
@@ -208,28 +212,31 @@ class DeviceWidget(QWidget):
         self.buttonConfig.setEnabled(True)
 
 
-
-
+#Widget for the BMA280. WHen creating your own widget use this as an example
 class BMA280Widget(DeviceWidget):
     def __init__(self, bma):
         super().__init__(bma)
 
+        #values for the plot
         self.t = []
         self.x = []
         self.y = []
         self.z = []
 
+        #buttons that are exclusive for the BMA280
         self.buttonTemp = QPushButton("read temperature")
         self.labelTemp = QLabel("°C")
         self.buttonAcc = QPushButton("read acceleration")
         self.labelAcc = QLabel("g")
         self.buttonPlot = QPushButton("Plot")
 
+        #define widget and lines for plot
         self.plotWidget = pyqtgraph.PlotWidget()
         self.line_x = self.plotWidget.plot(self.t, self.x, pen=pyqtgraph.mkPen(color='r', width=2), name="x")
         self.line_y = self.plotWidget.plot(self.t, self.y, pen=pyqtgraph.mkPen(color='g', width=2), name="y")
         self.line_z = self.plotWidget.plot(self.t, self.z, pen=pyqtgraph.mkPen(color='b', width=2), name="z")
 
+        #create check box for plot
         self.LineCheckBoxsWidget = QWidget()
         self.checkBoxX = QCheckBox("x")
         self.checkBoxY = QCheckBox("y")
@@ -242,6 +249,7 @@ class BMA280Widget(DeviceWidget):
             self.layoutLineCheckBoxs.itemAt(idx).widget().setChecked(True)
         self.LineCheckBoxsWidget.setLayout(self.layoutLineCheckBoxs)
 
+        #create slider for refresh rate
         self.labelRefreshRate = QLabel("Plot Refresh Rate [ms]")
         self.sliderRefreshRate = QSlider()
         self.sliderRefreshRate.setOrientation(Qt.Orientation.Horizontal)
@@ -252,6 +260,7 @@ class BMA280Widget(DeviceWidget):
         self.sliderRefreshRate.setSingleStep(10)
         self.sliderRefreshRate.setPageStep(100)
 
+        #create button to read from a specific addr
         self.buttonRead = QPushButton("read")
         self.ReadAddrLineEdit = QLineEdit("00")
         self.ReadAddrLineEdit.setFont('Consolas')
@@ -265,6 +274,7 @@ class BMA280Widget(DeviceWidget):
         self.ReadNumBytesSpinBox.setFont('Consolas')
         self.ReadNumBytesSpinBox.setFixedSize(45, 24)
 
+        #create button to write to a specific addr
         self.buttonWrite = QPushButton("write")
         self.WriteAddrLineEdit = QLineEdit("19")
         self.WriteAddrLineEdit.setFont('Consolas')
@@ -277,9 +287,12 @@ class BMA280Widget(DeviceWidget):
         self.WriteDataLineEdit.setFixedSize(21, 24)
         self.WriteDataLineEdit.setInputMask('>HH;_')
 
+        #create button to execute initial configuration
         self.buttonCfgDTab = QPushButton("config Double Tap Interrupt")
         self.buttonResetInt = QPushButton("reset Interrupt")
 
+
+        #add the buttons to the graphical interface
         #self.layout.addWidget(self.buttonTemp, 2, 0)
         #self.layout.addWidget(self.labelTemp, 2, 1)
         #self.layout.addWidget(self.buttonAcc, 3, 0)
@@ -299,6 +312,7 @@ class BMA280Widget(DeviceWidget):
         #self.layout.addWidget(self.buttonResetInt, 8, 0)
         #self.layout.addWidget(self.buttonCfgDTab, 8, 1)
 
+        #connect the buttons to the funktions they should execute
         self.buttonTemp.clicked.connect(self.getTemperature)
         self.buttonAcc.clicked.connect(self.getAcceleration)
         self.buttonPlot.clicked.connect(self.plot)

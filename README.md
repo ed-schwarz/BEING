@@ -2,6 +2,8 @@
 
 Python API to be used in the BEING project with the SPEKTRA S-Test
 
+Currently only working in onde of the two cards in the S-Test (first from left to right).
+
 ## Installation
 
 Clone the directory using git clone <URL>
