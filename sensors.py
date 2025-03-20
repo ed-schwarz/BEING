@@ -409,6 +409,332 @@ class BMA280(Sensor):
         time.sleep(.01)
         res = self.write(register, bytearray([reg]))
         return res
+    
+class ADXL343(Sensor):
+    device_type = "ADXL343"
+    pwr_sources = [4]
+
+    i2c_addr = 0x53
+    pins = {
+        'I2C_SDA': 5, 'I2C_SCL': 7,
+        'SPI_SDI': 5, 'SPI_SDO': 6, 'SPI_SCK': 7, 'SPI_CSB': 9,
+        'PS': 8,  # protocol select (GND => SPI, VDDIO => I2C) at MIO8
+        'INT1': 4, 'INT2': 3,  # interrupt pins
+        'GND' : 10
+    }
+    register = {
+        'acc_x': 0x32,
+        'acc_y': 0x34,
+        'acc_z': 0x36,
+    }
+
+    def __init__(self, utb: BsiInstrument, pwr_sources, pins, interface):
+        super().__init__(utb)
+        self.pwr_sources = pwr_sources
+        self.pins = pins
+        self.interface = interface
+        self.utb_i2c = BsiI2c(self.utb, 1, 1)  
+        self.measure_thread = ADXL343AccelerationMeasurementThread(self, 'xyz', 1)
+
+    #configure the Sensor
+    @utb_connected
+    def configure(self):
+        res = True
+        for src in self.pwr_sources:
+            res = res and self.utb.pwr_set_supply_voltagemode(src, 0)
+            res = res and self.utb.pwr_config_voltage_source(src, 0, 3.3, -0.1, 2, True)
+        self.checklog("config VDD and VDDIO to 3.3V", res)
+
+        # i2c
+        res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO{:02d}_On'.format(self.pins['PS']), 0)
+        self.checklog("use I2C as protocol", res)
+        mio_config = [0x00] * 16
+        mio_config[self.pins['I2C_SCL'] - 1] = 0x00802005
+        mio_config[self.pins['I2C_SDA'] - 1] = 0x00802004
+        mio_config[self.pins['SPI_SDO'] - 1] = 0x00000040  # SDO to GND to set slave addr to 0x53
+        mio_config[self.pins['SPI_CSB'] - 1] = 0x00000040  # CSB to GND to set slave addr to 0x53
+        mio_config[self.pins['GND'] - 1] = 0x00000040  # CSB to GND to set slave addr to 0x53
+        mio_config[self.pins['INT1'] - 1] = 0x00004000  # as input with pull down
+        mio_config[self.pins['INT2'] - 1] = 0x00004000  # as input with pull down
+        res = self.utb.mio_load_config(1, mio_config)
+        res = res and self.utb.mio_activate_config(1, 0)
+        self.checklog("configure I2C and interrupt pins", res)
+
+        # bank voltages
+        res = self.utb.mio_set_low_level_out(1, 0, 0)
+        res = res and self.utb.mio_set_low_level_in(1, 0.2 * 3.3, 0)
+        res = res and self.utb.mio_set_high_level_in(1, 0.8 * 3.3, 0)
+        res = res and self.utb.mio_set_high_level_out(1, 3.3, 0)
+        res = res and self.utb.mio_set_low_level_out(2, 0, 0)
+        res = res and self.utb.mio_set_low_level_in(2, 0.2 * 3.3, 0)
+        res = res and self.utb.mio_set_high_level_in(2, 0.8 * 3.3, 0)
+        res = res and self.utb.mio_set_high_level_out(2, 3.3, 0)
+
+        self.checklog("Setting Pin I/O Voltage Levels", res)
+
+    @utb_connected
+    def read(self, addr: bytearray, num_bytes: int = 1) -> Union[bytearray, bool]:
+        """
+        read register at address addr [0x00 to 0x3F]
+        :param addr: start address to read from
+        :param num_bytes: number of bytes to read
+        :return: read bytes if succeed, else False
+        """
+        # read data
+        res = self.utb_i2c.write(self.i2c_addr, addr)
+        time.sleep(.10)
+        ans = self.utb_i2c.read(self.i2c_addr, num_bytes)
+        res = res and bool(ans)
+        if res:
+            self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
+                          ' '.join(format(x, '02X') for x in addr) + ": " +
+                          ' '.join(format(x, '02X') for x in ans), res)
+            return ans
+        else:
+            self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
+                          ' '.join(format(x, '02X') for x in addr), res)
+            return False
+
+    @utb_connected
+    def write(self, addr: Union[int, bytearray], data: bytearray) -> bool:
+        """
+        write data to register at addr
+        """
+        # add addr word at start
+        data.insert(0, addr)
+
+        res = self.utb_i2c.write(self.i2c_addr, data)
+
+        self.checklog("Writing " +
+                      str(len(data) - 1) + " bytes at address 0x" + format(data[0], '02X') + ": " +
+                      ' '.join(format(x, '02X') for x in data[1:]), res)
+        return res
+
+
+    @utb_connected
+    def getAcceleration(self, axis='xyz') -> Optional[dict]:
+        # in python it's a bit complicated to achieve to combine the actual sensor value because we need to
+        # convert between int to make use of bitoperators and bytes-object to cover the input value type of msb and lsb
+        # and to interpret a 16-bit value as twos complement
+        axis = set('xyz').intersection(set(axis))
+        assert len(axis) in range(1, 4)
+        # map register address of lsb to axis
+        axis_addr = {ax: self.register['acc_' + ax].to_bytes(1, 'big') for ax in axis}
+        ans = dict()
+        for ax, lsb_addr in axis_addr.items():
+            res = self.utb_i2c.write(self.i2c_addr, bytearray(lsb_addr))  # address of the lsb, needs to be read first
+            print(res)
+            lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
+            print(lsb)
+            lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
+            print(lsb)
+            res = res and self.utb_i2c.write(self.i2c_addr,
+                                             bytearray((int.from_bytes(lsb_addr, 'big') + 1).to_bytes(1, 'big')))
+            msb = self.utb_i2c.read(self.i2c_addr, 1)
+            msb = int.from_bytes(msb, "big")
+
+            acc = ((msb << 8) + lsb)  # combine msb and first 6 bit of lsb for full 14bit sensor value
+            if acc & 1 << 16 - 1:  # if first of the 14bits is 1, it's a signed value
+                acc |= int('0b1000000000000000', 2)  # fill 14bit value with 1s to 16bit value
+                acc = acc.to_bytes(2, 'big')  # now we can convert it back to a 2byte bytes-object
+                acc = int.from_bytes(acc, 'big',
+                                     signed=True)  # so now it's possible to use the python builtin function to convert it as a two's complement value back to int
+            #acc /= 4096  # convert from LSB to g
+            self.checklog("Acceleration {}-axis: {:.3f}g".format(ax, acc), bool(res))
+            ans[ax] = acc
+        return ans
+
+    @utb_connected
+    def configureDTap(self):
+        """
+        write registers to enable interrupt for recognising double tap event on INT1-pin
+        :return: True if success else False
+        """
+        res = self._ChangeBitInRegister(0x19, 4, 1)   # map interrupt to INT1-pin
+        self.checklog("map interrupt to INT1-pin", res)
+        res &= self.write(0x21, bytearray([0x0F]))  # set interrupt mode to latched
+        self.checklog("set interrupt mode to latched", res)
+        res &= self._ChangeBitInRegister(0x16, 4, 1)  # DTap interrupt enable
+        self.checklog("DTap interrupt enable", res)
+        return res
+
+    @utb_connected
+    def resetInterrupt(self):
+        """
+        reset the Interrupt in register 0x21 bit7
+        :return: True if success else False
+        """
+        res = self._ChangeBitInRegister(0x21, 7, 1)
+        self.checklog("reset Interrupt", res)
+        return res
+
+    @utb_connected
+    def _ChangeBitInRegister(self, register: int, bit: int, mode: int) -> bool:
+        """
+        set or reset a bit in a 8bit-register but leave the other bytes as is
+        :param register: register address, e.g. 0x21
+        :param bit: 0 to 7
+        :param mode: 1 to set bit, 0 to reset bit
+        :return: True if success, else False
+        """
+        assert bit in range(8)
+        assert mode in range(2)
+        reg = self.read(bytearray([register]))
+        if type(reg) is bool and not reg:
+            return False
+        reg = int.from_bytes(reg, 'big')
+        if mode == 1:
+            reg |= 1 << bit
+        if mode == 0:
+            reg &= ~(1 << bit)
+        time.sleep(.01)
+        res = self.write(register, bytearray([reg]))
+        return res
+    
+
+class LPS22(Sensor):
+    device_type = "LPS22"
+    pwr_sources = [3, 4]
+
+    i2c_addr = 0x5D
+    pins = {
+        'I2C_SDA': 5, 'I2C_SCL': 7,
+        'SPI_SDI': 5, 'SPI_SDO': 6, 'SPI_SCK': 7, 'SPI_CSB': 9,
+        'PS': 8,  # protocol select (GND => SPI, VDDIO => I2C) at MIO8
+        'INT1': 4, 'INT2': 3  # interrupt pins
+    }
+    register = {
+        'acc_x': 0x32,
+        'acc_y': 0x34,
+        'acc_z': 0x36,
+    }
+
+    def __init__(self, utb: BsiInstrument, pwr_sources, pins, interface):
+        super().__init__(utb)
+        self.pwr_sources = pwr_sources
+        self.pins = pins
+        self.interface = interface
+        self.utb_i2c = BsiI2c(self.utb, 1, 1)  
+
+
+    #configure the Sensor
+    @utb_connected
+    def configure(self):
+        res = True
+        for src in self.pwr_sources:
+            res = res and self.utb.pwr_set_supply_voltagemode(src, 0)
+            res = res and self.utb.pwr_config_voltage_source(src, 0, 3.3, -0.1, 2, True)
+        self.checklog("config VDD and VDDIO to 3.3V", res)
+
+        # i2c
+        res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO{:02d}_On'.format(self.pins['PS']), 0)
+        self.checklog("use I2C as protocol", res)
+        mio_config = [0x00] * 16
+        mio_config[self.pins['I2C_SCL'] - 1] = 0x00802005
+        mio_config[self.pins['I2C_SDA'] - 1] = 0x00802004
+        mio_config[self.pins['SPI_SDO'] - 1] = 0x00000040  # SDO to GND to set slave addr to 0x53
+        mio_config[self.pins['INT1'] - 1] = 0x00004000  # as input with pull down
+        mio_config[self.pins['INT2'] - 1] = 0x00004000  # as input with pull down
+        res = self.utb.mio_load_config(1, mio_config)
+        res = res and self.utb.mio_activate_config(1, 0)
+        self.checklog("configure I2C and interrupt pins", res)
+
+        # bank voltages
+        res = self.utb.mio_set_low_level_out(1, 0, 0)
+        res = res and self.utb.mio_set_low_level_in(1, 0.2 * 3.3, 0)
+        res = res and self.utb.mio_set_high_level_in(1, 0.8 * 3.3, 0)
+        res = res and self.utb.mio_set_high_level_out(1, 3.3, 0)
+        res = res and self.utb.mio_set_low_level_out(2, 0, 0)
+        res = res and self.utb.mio_set_low_level_in(2, 0.2 * 3.3, 0)
+        res = res and self.utb.mio_set_high_level_in(2, 0.8 * 3.3, 0)
+        res = res and self.utb.mio_set_high_level_out(2, 3.3, 0)
+
+        self.checklog("Setting Pin I/O Voltage Levels", res)
+
+    @utb_connected
+    def read(self, addr: bytearray, num_bytes: int = 1) -> Union[bytearray, bool]:
+        """
+        read register at address addr [0x00 to 0x3F]
+        :param addr: start address to read from
+        :param num_bytes: number of bytes to read
+        :return: read bytes if succeed, else False
+        """
+        # read data
+        res = self.utb_i2c.write(self.i2c_addr, addr)
+        time.sleep(.010)
+        ans = self.utb_i2c.read(self.i2c_addr, num_bytes)
+        res = res and bool(ans)
+        if res:
+            self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
+                          ' '.join(format(x, '02X') for x in addr) + ": " +
+                          ' '.join(format(x, '02X') for x in ans), res)
+            return ans
+        else:
+            self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
+                          ' '.join(format(x, '02X') for x in addr), res)
+            return False
+
+    @utb_connected
+    def write(self, addr: Union[int, bytearray], data: bytearray) -> bool:
+        """
+        write data to register at addr
+        """
+        # add addr word at start
+        data.insert(0, addr)
+
+        res = self.utb_i2c.write(self.i2c_addr, data)
+
+        self.checklog("Writing " +
+                      str(len(data) - 1) + " bytes at address 0x" + format(data[0], '02X') + ": " +
+                      ' '.join(format(x, '02X') for x in data[1:]), res)
+        return res
+
+
+    @utb_connected
+    def getPressure(self):
+        res = self.utb_i2c.write(self.i2c_addr, b'\0x28')  # address of the lsb, needs to be read first
+        print(res)
+        lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
+        print(lsb)
+        lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
+        print(lsb)
+        res = res and self.utb_i2c.write(self.i2c_addr, b'\0x29')
+        mid = self.utb_i2c.read(self.i2c_addr, 1)
+        mid = int.from_bytes(mid, "big")
+        print(mid)
+        res = res and self.utb_i2c.write(self.i2c_addr, b'\0x2A')
+        msb = self.utb_i2c.read(self.i2c_addr, 1)
+        msb = int.from_bytes(msb, "big")
+        print(mid)
+
+        acc = ((msb << 16) + (mid << 8) + lsb)  # combine msb and first 6 bit of lsb for full 14bit sensor value
+
+        self.checklog("Pressure {:.3f}g".format(acc), bool(res))
+        return acc
+
+
+    @utb_connected
+    def _ChangeBitInRegister(self, register: int, bit: int, mode: int) -> bool:
+        """
+        set or reset a bit in a 8bit-register but leave the other bytes as is
+        :param register: register address, e.g. 0x21
+        :param bit: 0 to 7
+        :param mode: 1 to set bit, 0 to reset bit
+        :return: True if success, else False
+        """
+        assert bit in range(8)
+        assert mode in range(2)
+        reg = self.read(bytearray([register]))
+        if type(reg) is bool and not reg:
+            return False
+        reg = int.from_bytes(reg, 'big')
+        if mode == 1:
+            reg |= 1 << bit
+        if mode == 0:
+            reg &= ~(1 << bit)
+        time.sleep(.01)
+        res = self.write(register, bytearray([reg]))
+        return res
 
 #used to measure in GUI
 class BMA280AccelerationMeasurementThread(QThread):
@@ -422,6 +748,40 @@ class BMA280AccelerationMeasurementThread(QThread):
         """
         super().__init__(parent)
         assert isinstance(parent, BMA280)
+        axis = set('xyz').intersection(set(axis))
+        assert len(axis) in range(1, 4)
+        self.axis = axis
+        self.dt = dt
+        self.count = 0
+
+    def run(self):
+        try:
+            assert self.parent().utb.connected
+            while True:
+                acc = self.parent().getAcceleration(self.axis)
+                self.count += 1
+                acc['count'] = self.count
+                self.newValue.emit(acc)
+                print(str(self.count), end=' ', flush=True)
+                time.sleep(self.dt)
+        except AssertionError as e:
+            self.parent().checklog("UTB not connected", False)
+
+    def terminate(self):
+        print("measure thread terminated")
+        super().terminate()
+
+class ADXL343AccelerationMeasurementThread(QThread):
+    newValue = Signal(dict)
+
+    def __init__(self, parent: ADXL343, axis: Union[str, set] = 'xyz', dt: Union[int, float] = 1):
+        """
+        :param parent:
+        :param axis: axis to be measured as set of x, y, z or string, e.g. 'xz'
+        :param dt: refresh rate in seconds
+        """
+        super().__init__(parent)
+        assert isinstance(parent, ADXL343)
         axis = set('xyz').intersection(set(axis))
         assert len(axis) in range(1, 4)
         self.axis = axis

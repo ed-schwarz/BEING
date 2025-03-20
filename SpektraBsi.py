@@ -706,6 +706,8 @@ class BsiInstrument:
         cmd = 'DIG_CFG_SetHighLevelInBank' + str(bank)
         f_list = self._create_param_list_string(str(voltage), '', card_select, False)
         res = self._query(cmd, f_list)
+        #print("1")
+        #print(res)
         res = self._parse_answer(res, 2, 'andbool', card_select)
         return res
 
