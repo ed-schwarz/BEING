@@ -447,6 +447,8 @@ class ADXL343(Sensor):
 
         # i2c
         res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO{:02d}_On'.format(self.pins['PS']), 0)
+        res = self.utb.i2c_set_master_address(i2c_addr, 0, 1)
+        self.checklog("Setting I2C Address", res)
         self.checklog("use I2C as protocol", res)
         mio_config = [0x00] * 16
         mio_config[self.pins['I2C_SCL'] - 1] = 0x00802005
