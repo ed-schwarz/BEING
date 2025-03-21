@@ -412,12 +412,11 @@ class BMA280(Sensor):
     
 class ADXL343(Sensor):
     device_type = "ADXL343"
-    pwr_sources = [4]
+    pwr_sources = [1]
 
     i2c_addr = 0x53
     pins = {
-        'I2C_SDA': 5, 'I2C_SCL': 7,
-        'SPI_SDI': 5, 'SPI_SDO': 6, 'SPI_SCK': 7, 'SPI_CSB': 9,
+        'I2C_SDA': 1, 'I2C_SCL': 2,
         'PS': 8,  # protocol select (GND => SPI, VDDIO => I2C) at MIO8
         'INT1': 4, 'INT2': 3,  # interrupt pins
         'GND' : 10
@@ -437,6 +436,8 @@ class ADXL343(Sensor):
         self.measure_thread = ADXL343AccelerationMeasurementThread(self, 'xyz', 1)
 
     #configure the Sensor
+    
+    
     @utb_connected
     def configure(self):
         res = True
@@ -492,8 +493,8 @@ class ADXL343(Sensor):
         time.sleep(.10)
         ans = self.utb_i2c.read(self.i2c_addr, num_bytes)
         print(ans)
-        #res = res and bool(ans)
-        res = bool(ans)
+        res = res and bool(ans)
+        #res = bool(ans)
         if res:
             self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
                           ' '.join(format(x, '02X') for x in addr) + ": " +
@@ -595,15 +596,10 @@ class LPS22(Sensor):
 
     i2c_addr = 0x5D
     pins = {
-        'I2C_SDA': 5, 'I2C_SCL': 7,
-        'SPI_SDI': 5, 'SPI_SDO': 6, 'SPI_SCK': 7, 'SPI_CSB': 9,
+        'I2C_SDA': 1, 'I2C_SCL': 2,
         'PS': 8,  # protocol select (GND => SPI, VDDIO => I2C) at MIO8
-        'INT1': 4, 'INT2': 3  # interrupt pins
-    }
-    register = {
-        'acc_x': 0x32,
-        'acc_y': 0x34,
-        'acc_z': 0x36,
+        'INT1': 4, 'INT2': 3,  # interrupt pins
+        'GND': 10
     }
 
     def __init__(self, utb: BsiInstrument, pwr_sources, pins, interface):
@@ -618,39 +614,44 @@ class LPS22(Sensor):
     @utb_connected
     def configure(self):
         res = True
+        voltage = 3.3
         for src in self.pwr_sources:
             res = res and self.utb.pwr_set_supply_voltagemode(src, 0)
-            res = res and self.utb.pwr_config_voltage_source(src, 0, 3.3, -0.1, 2, True)
+            res = res and self.utb.pwr_config_voltage_source(src, 0, voltage, -0.1, 2, True)
         self.checklog("config VDD and VDDIO to 3.3V", res)
 
         # i2c
-        res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO{:02d}_On'.format(self.pins['PS']), 0)
+        #res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO{:02d}_On'.format(self.pins['PS']), 0)
         # res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO08_On', 0)
 
         self.checklog("use I2C as protocol", res)
         mio_config = [0x00] * 16
         mio_config[self.pins['I2C_SCL'] - 1] = 0x00802005
         mio_config[self.pins['I2C_SDA'] - 1] = 0x00802004
-        # mio_config[self.pins['GND'] - 1] = 0x00000040  # CSB to GND to set slave addr to 0x53
-        # mio_config[self.pins['INT1'] - 1] = 0x00004000  # as input with pull down
-        # mio_config[self.pins['INT2'] - 1] = 0x00004000  # as input with pull down
+        mio_config[self.pins['GND'] - 1] = 0x00000040  # CSB to GND to set slave addr to 0x53
+        mio_config[self.pins['INT1'] - 1] = 0x00004000  # as input with pull down
+        mio_config[self.pins['INT2'] - 1] = 0x00004000  # as input with pull down
         res = self.utb.mio_load_config(1, mio_config)
         self.checklog("configure I2C and interrupt pins", res)
         res = res and self.utb.mio_activate_config(1, 0)
+        res = res and self.utb.mio_activate_config(3, 0)
         res = self.utb.i2c_set_master_address(self.i2c_addr, 0, 1)
         self.checklog("Setting I2C Address", res)
 
+        
+
         # bank voltages
         res = self.utb.mio_set_low_level_out(1, 0, 0)
-        res = res and self.utb.mio_set_low_level_in(1, 0.2 * 3.3, 0)
-        res = res and self.utb.mio_set_high_level_in(1, 0.8 * 3.3, 0)
-        res = res and self.utb.mio_set_high_level_out(1, 3.3, 0)
+        res = res and self.utb.mio_set_low_level_in(1, 0.2 * voltage, 0)
+        res = res and self.utb.mio_set_high_level_in(1, 0.8 * voltage, 0)
+        res = res and self.utb.mio_set_high_level_out(1, voltage, 0)
         res = res and self.utb.mio_set_low_level_out(2, 0, 0)
-        res = res and self.utb.mio_set_low_level_in(2, 0.2 * 3.3, 0)
-        res = res and self.utb.mio_set_high_level_in(2, 0.8 * 3.3, 0)
-        res = res and self.utb.mio_set_high_level_out(2, 3.3, 0)
+        res = res and self.utb.mio_set_low_level_in(2, 0.2 * voltage, 0)
+        res = res and self.utb.mio_set_high_level_in(2, 0.8 * voltage, 0)
+        res = res and self.utb.mio_set_high_level_out(2, voltage, 0)
 
         self.checklog("Setting Pin I/O Voltage Levels", res)
+        
 
     @utb_connected
     def read(self, addr: bytearray, num_bytes: int = 1) -> Union[bytearray, bool]:
@@ -695,22 +696,12 @@ class LPS22(Sensor):
     def getPressure(self):
         res = self.utb_i2c.write(self.i2c_addr, b'\0x28')  # address of the lsb, needs to be read first
         #print(res)
-        lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
+        lsb = self.utb_i2c.read(self.i2c_addr, 3)  # read lsb first
         #print(lsb)
-        lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
-        #print(lsb)
-        res = res and self.utb_i2c.write(self.i2c_addr, b'\0x29')
-        mid = self.utb_i2c.read(self.i2c_addr, 1)
-        mid = int.from_bytes(mid, "big")
-        #print(mid)
-        res = res and self.utb_i2c.write(self.i2c_addr, b'\0x2A')
-        msb = self.utb_i2c.read(self.i2c_addr, 1)
-        msb = int.from_bytes(msb, "big")
-        #print(mid)
+        acc = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
+        
 
-        acc = ((msb << 16) + (mid << 8) + lsb)  # combine msb and first 6 bit of lsb for full 14bit sensor value
-
-        self.checklog("Pressure {:.3f}g".format(acc), bool(res))
+        self.checklog("Pressure {:.3f}".format(acc), bool(res))
         return acc
 
 

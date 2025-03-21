@@ -11,7 +11,7 @@ Install the required Packages: PySide6, numpy, scipy, pyqtgraph
 
 ## Usage
 
-An example of the usage can be found in run_gui.py
+An example of the usage can be found in run_gui.py for the gui.
 
 ### Sensors usage
 

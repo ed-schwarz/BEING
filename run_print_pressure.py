@@ -14,7 +14,7 @@ if __name__ == '__main__':
     evalutb.last_address = socket_addr
 
     # components of eval board
-    pwr_sources = [1]
+    pwr_sources = [3]
     pins = {
         'I2C_SDA': 1, 'I2C_SCL': 2,
         'PS': 8,  # protocol select (GND => SPI, VDDIO => I2C) at MIO8
@@ -36,13 +36,12 @@ if __name__ == '__main__':
     device_id = device.read(bytearray(b'\0x0f'))
     print("device_id:")
     print(device_id)
-    time.sleep(2)
-    '''
+    
     for i in range(4):
         acc = device.getPressure()
         print(acc)
         time.sleep(2)
-    '''
+    
 
     device.power_off()
     connected = evalutb.disconnect()

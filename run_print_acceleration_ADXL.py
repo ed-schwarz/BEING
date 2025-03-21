@@ -10,8 +10,7 @@ if __name__ == '__main__':
     evalutb.last_address = socket_addr
 
     # components of eval board
-    pwr_sources = [1]
-    #pwr_sources = [3, 4]
+    pwr_sources = [1, 2]
     pins = {
         'I2C_SDA': 1, 'I2C_SCL': 2,
         'PS': 8,  # protocol select (GND => SPI, VDDIO => I2C) at MIO8
@@ -20,7 +19,7 @@ if __name__ == '__main__':
     }
     
     device = sensors.ADXL343(evalutb, pwr_sources, pins, 'I2C')
-    #device = sensors.BMA280(evalutb, pwr_sources, pins, 'I2C')
+
     connected = evalutb.open_bsi(socket_addr)
     
     #device.configure()
@@ -35,7 +34,7 @@ if __name__ == '__main__':
     print(device_id)
 
     addr = int("0x0d", 16)
-    device.write(addr, bytearray(b'\0x08'))
+    #device.write(addr, bytearray(b'\0x08'))
 
     acc_x = device.read(bytearray(b'\0x32'), 2)
     print("acc in x:")
@@ -45,7 +44,7 @@ if __name__ == '__main__':
     print("format:")
     print(format)
 
-    for i in range(5):
+    for i in range(3):
         acc = device.getAcceleration('x')
         print(acc)
         time.sleep(2)
