@@ -488,9 +488,12 @@ class ADXL343(Sensor):
         """
         # read data
         res = self.utb_i2c.write(self.i2c_addr, addr)
+        print(res)
         time.sleep(.10)
         ans = self.utb_i2c.read(self.i2c_addr, num_bytes)
-        res = res and bool(ans)
+        print(ans)
+        #res = res and bool(ans)
+        res = bool(ans)
         if res:
             self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
                           ' '.join(format(x, '02X') for x in addr) + ": " +
@@ -530,21 +533,9 @@ class ADXL343(Sensor):
         for ax, lsb_addr in axis_addr.items():
             res = self.utb_i2c.write(self.i2c_addr, bytearray(lsb_addr))  # address of the lsb, needs to be read first
             #print(res)
-            lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
-            #print(lsb)
-            lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
-            #print(lsb)
-            res = res and self.utb_i2c.write(self.i2c_addr,
-                                             bytearray((int.from_bytes(lsb_addr, 'big') + 1).to_bytes(1, 'big')))
-            msb = self.utb_i2c.read(self.i2c_addr, 1)
-            msb = int.from_bytes(msb, "big")
-
-            acc = ((msb << 8) + lsb)  # combine msb and first 6 bit of lsb for full 14bit sensor value
-            if acc & 1 << 16 - 1:  # if first of the 14bits is 1, it's a signed value
-                acc |= int('0b1000000000000000', 2)  # fill 14bit value with 1s to 16bit value
-                acc = acc.to_bytes(2, 'big')  # now we can convert it back to a 2byte bytes-object
-                acc = int.from_bytes(acc, 'big',
-                                     signed=True)  # so now it's possible to use the python builtin function to convert it as a two's complement value back to int
+            read = self.utb_i2c.read(self.i2c_addr, 2)  # read lsb first
+            print(read)
+            acc = int.from_bytes(read, "big")  # convert it to int to use bitoperators
             #acc /= 4096  # convert from LSB to g
             self.checklog("Acceleration {}-axis: {:.3f}g".format(ax, acc), bool(res))
             ans[ax] = acc
@@ -600,7 +591,7 @@ class ADXL343(Sensor):
 
 class LPS22(Sensor):
     device_type = "LPS22"
-    pwr_sources = [3, 4]
+    pwr_sources = [1]
 
     i2c_addr = 0x5D
     pins = {
@@ -634,16 +625,20 @@ class LPS22(Sensor):
 
         # i2c
         res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO{:02d}_On'.format(self.pins['PS']), 0)
+        # res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO08_On', 0)
+
         self.checklog("use I2C as protocol", res)
         mio_config = [0x00] * 16
         mio_config[self.pins['I2C_SCL'] - 1] = 0x00802005
         mio_config[self.pins['I2C_SDA'] - 1] = 0x00802004
-        mio_config[self.pins['SPI_SDO'] - 1] = 0x00000040  # SDO to GND to set slave addr to 0x53
-        mio_config[self.pins['INT1'] - 1] = 0x00004000  # as input with pull down
-        mio_config[self.pins['INT2'] - 1] = 0x00004000  # as input with pull down
+        # mio_config[self.pins['GND'] - 1] = 0x00000040  # CSB to GND to set slave addr to 0x53
+        # mio_config[self.pins['INT1'] - 1] = 0x00004000  # as input with pull down
+        # mio_config[self.pins['INT2'] - 1] = 0x00004000  # as input with pull down
         res = self.utb.mio_load_config(1, mio_config)
-        res = res and self.utb.mio_activate_config(1, 0)
         self.checklog("configure I2C and interrupt pins", res)
+        res = res and self.utb.mio_activate_config(1, 0)
+        res = self.utb.i2c_set_master_address(self.i2c_addr, 0, 1)
+        self.checklog("Setting I2C Address", res)
 
         # bank voltages
         res = self.utb.mio_set_low_level_out(1, 0, 0)
@@ -669,7 +664,7 @@ class LPS22(Sensor):
         res = self.utb_i2c.write(self.i2c_addr, addr)
         time.sleep(.010)
         ans = self.utb_i2c.read(self.i2c_addr, num_bytes)
-        res = res and bool(ans)
+        res = bool(ans)
         if res:
             self.checklog("Reading " + str(num_bytes) + " bytes at address 0x" +
                           ' '.join(format(x, '02X') for x in addr) + ": " +

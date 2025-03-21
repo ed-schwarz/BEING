@@ -5,7 +5,7 @@ import time
 
 if __name__ == '__main__':
     # UTB instance
-    socket_addr = '192.168.001.77'
+    socket_addr = '192.168.1.77'
     evalutb = BsiInstrument()
     evalutb.last_address = socket_addr
 
@@ -30,9 +30,20 @@ if __name__ == '__main__':
 
     device.power_on()
 
-    device_id = device.read(b'\0x00')
+    device_id = device.read(bytearray(b'\0x00'))
     print("device_id:")
     print(device_id)
+
+    addr = int("0x0d", 16)
+    device.write(addr, bytearray(b'\0x08'))
+
+    acc_x = device.read(bytearray(b'\0x32'), 2)
+    print("acc in x:")
+    print(acc_x)
+
+    format = device.read(bytearray(b'\0x2d'))
+    print("format:")
+    print(format)
 
     for i in range(5):
         acc = device.getAcceleration('x')
