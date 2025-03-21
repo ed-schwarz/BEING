@@ -447,21 +447,24 @@ class ADXL343(Sensor):
 
         # i2c
         res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO{:02d}_On'.format(self.pins['PS']), 0)
-        res = self.utb.i2c_set_master_address(i2c_addr, 0, 1)
-        self.checklog("Setting I2C Address", res)
+        #res = self.utb.send_cmd_parse_answer('PWR_CFG_S4_MIO08_On', 0)
+
+        
+
         self.checklog("use I2C as protocol", res)
         mio_config = [0x00] * 16
         mio_config[self.pins['I2C_SCL'] - 1] = 0x00802005
         mio_config[self.pins['I2C_SDA'] - 1] = 0x00802004
-        mio_config[self.pins['SPI_SDO'] - 1] = 0x00000040  # SDO to GND to set slave addr to 0x53
-        mio_config[self.pins['SPI_CSB'] - 1] = 0x00000040  # CSB to GND to set slave addr to 0x53
-        mio_config[self.pins['GND'] - 1] = 0x00000040  # CSB to GND to set slave addr to 0x53
-        mio_config[self.pins['INT1'] - 1] = 0x00004000  # as input with pull down
-        mio_config[self.pins['INT2'] - 1] = 0x00004000  # as input with pull down
+        #mio_config[self.pins['GND'] - 1] = 0x00000040  # CSB to GND to set slave addr to 0x53
+        #mio_config[self.pins['INT1'] - 1] = 0x00004000  # as input with pull down
+        #mio_config[self.pins['INT2'] - 1] = 0x00004000  # as input with pull down
         res = self.utb.mio_load_config(1, mio_config)
-        res = res and self.utb.mio_activate_config(1, 0)
         self.checklog("configure I2C and interrupt pins", res)
-
+        res = res and self.utb.mio_activate_config(1, 0)
+        res = self.utb.i2c_set_master_address(self.i2c_addr, 0, 1)
+        self.checklog("Setting I2C Address", res)
+        
+        
         # bank voltages
         res = self.utb.mio_set_low_level_out(1, 0, 0)
         res = res and self.utb.mio_set_low_level_in(1, 0.2 * 3.3, 0)
@@ -473,6 +476,7 @@ class ADXL343(Sensor):
         res = res and self.utb.mio_set_high_level_out(2, 3.3, 0)
 
         self.checklog("Setting Pin I/O Voltage Levels", res)
+        
 
     @utb_connected
     def read(self, addr: bytearray, num_bytes: int = 1) -> Union[bytearray, bool]:
@@ -525,11 +529,11 @@ class ADXL343(Sensor):
         ans = dict()
         for ax, lsb_addr in axis_addr.items():
             res = self.utb_i2c.write(self.i2c_addr, bytearray(lsb_addr))  # address of the lsb, needs to be read first
-            print(res)
+            #print(res)
             lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
-            print(lsb)
+            #print(lsb)
             lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
-            print(lsb)
+            #print(lsb)
             res = res and self.utb_i2c.write(self.i2c_addr,
                                              bytearray((int.from_bytes(lsb_addr, 'big') + 1).to_bytes(1, 'big')))
             msb = self.utb_i2c.read(self.i2c_addr, 1)
@@ -695,19 +699,19 @@ class LPS22(Sensor):
     @utb_connected
     def getPressure(self):
         res = self.utb_i2c.write(self.i2c_addr, b'\0x28')  # address of the lsb, needs to be read first
-        print(res)
+        #print(res)
         lsb = self.utb_i2c.read(self.i2c_addr, 1)  # read lsb first
-        print(lsb)
+        #print(lsb)
         lsb = int.from_bytes(lsb, "big")  # convert it to int to use bitoperators
-        print(lsb)
+        #print(lsb)
         res = res and self.utb_i2c.write(self.i2c_addr, b'\0x29')
         mid = self.utb_i2c.read(self.i2c_addr, 1)
         mid = int.from_bytes(mid, "big")
-        print(mid)
+        #print(mid)
         res = res and self.utb_i2c.write(self.i2c_addr, b'\0x2A')
         msb = self.utb_i2c.read(self.i2c_addr, 1)
         msb = int.from_bytes(msb, "big")
-        print(mid)
+        #print(mid)
 
         acc = ((msb << 16) + (mid << 8) + lsb)  # combine msb and first 6 bit of lsb for full 14bit sensor value
 

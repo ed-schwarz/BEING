@@ -14,7 +14,7 @@ if __name__ == '__main__':
     evalutb.last_address = socket_addr
 
     # components of eval board
-    pwr_sources = [4]
+    pwr_sources = [1]
     pins = {
         'I2C_SDA': 5, 'I2C_SCL': 7,
         'SPI_SDI': 5, 'SPI_SDO': 6, 'SPI_SCK': 7, 'SPI_CSB': 9,
@@ -31,6 +31,7 @@ if __name__ == '__main__':
     device.configure
 
     device.power_on()
+
 
     #device_id = device.read(b'\0x00')
     #print("device_id:")

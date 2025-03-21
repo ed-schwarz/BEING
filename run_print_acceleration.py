@@ -10,11 +10,10 @@ if __name__ == '__main__':
     evalutb.last_address = socket_addr
 
     # components of eval board
-    #pwr_sources = [4]
-    pwr_sources = [3, 4]
+    pwr_sources = [1]
+    #pwr_sources = [3, 4]
     pins = {
-        'I2C_SDA': 5, 'I2C_SCL': 7,
-        'SPI_SDI': 5, 'SPI_SDO': 6, 'SPI_SCK': 7, 'SPI_CSB': 9,
+        'I2C_SDA': 1, 'I2C_SCL': 2,
         'PS': 8,  # protocol select (GND => SPI, VDDIO => I2C) at MIO8
         'INT1': 4, 'INT2': 3,  # interrupt pins
         'GND' : 10
